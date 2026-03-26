@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+    <title>RouteWise — Traffic Flow Analysis</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="topbar">
+  <div class="logo">
+    <div class="logo-icon">⬡</div>
+    Route<span>Wise</span>
+  </div>
+  <div class="divider-v"></div>
+  <div id="status-wrap">
+    <div id="status-badge">
+      <span id="status-dot"></span>
+      <span id="status-msg">Click on the map to set Source</span>
+    </div>
+  </div>
+  <button class="btn btn-outline" id="btn-reset">↺ Reset</button>
+  <button class="btn btn-primary" id="btn-analyze" disabled>⚡ Analyze Network</button>
+</div>
+
+<div id="map"></div>
+
+<div id="side-panel">
+  <div class="card">
+    <div class="card-title">Steps</div>
+    <div class="step-item">
+      <div class="step-num" id="sn1">1</div>
+      <div class="step-text"><b>Click</b> on the map to set <b>Source</b></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num" id="sn2">2</div>
+      <div class="step-text"><b>Click</b> again to set <b>Destination</b></div>
+    </div>
+    <div class="step-item">
+      <div class="step-num" id="sn3">3</div>
+      <div class="step-text">Click <b>Analyze Network</b> to view flow analysis</div>
+    </div>
+  </div>
+
+  <div class="card" id="panel-route" style="display:none">
+    <div class="card-title">Route Info</div>
+    <div class="metric-row"><span class="mn">Distance</span><span class="mv" id="pnl-dist">—</span></div>
+    <div class="metric-row"><span class="mn">Traffic Level</span><span id="pnl-traffic">—</span></div>
+    <div class="metric-row"><span class="mn">Max Flow</span><span class="mv" id="pnl-flow">—</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Legend</div>
+    <div class="metric-row">
+      <span class="mn"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2563eb;margin-right:6px;vertical-align:middle"></span>Source (S)</span>
+    </div>
+    <div class="metric-row">
+      <span class="mn"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#0891b2;margin-right:6px;vertical-align:middle"></span>Destination (T)</span>
+    </div>
+    <div class="metric-row">
+      <span class="mn"><span style="display:inline-block;width:22px;height:2px;background:#2563eb;margin-right:6px;vertical-align:middle;border-radius:2px"></span>Route Path</span>
+    </div>
+    <div class="metric-row" style="border:none">
+      <span class="mn"><span style="display:inline-block;width:22px;height:2px;background:#dc2626;margin-right:6px;vertical-align:middle;border-radius:2px"></span>Bottleneck Edge</span>
+    </div>
+  </div>
+</div>
+
+<div id="hint-bar"><b>Step 1:</b> Click anywhere on the map to place your <b>Source</b></div>
+
+<div id="modal-overlay">
+  <div id="modal">
+    <div class="modal-head">
+      <div class="modal-title">
+        <div class="modal-icon">📊</div>
+        Network Flow Analysis
+      </div>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">Maximum Flow</div>
+          <div class="stat-val blue" id="m-maxflow">—</div>
+          <div class="stat-sub">vehicles / sec</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Bottleneck Edge</div>
+          <div class="stat-val red" id="m-bottleneck">—</div>
+          <div class="stat-sub" id="m-bot-sub">min-cut edge</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Network Efficiency</div>
+          <div class="stat-val green" id="m-eff">—</div>
+          <div class="stat-sub">flow / total capacity</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">Graph Model — Max Flow / Min Cut</div>
+          <button class="info-btn" id="info-btn" title="Learn about Max Flow–Min Cut">i</button>
+        </div>
+
+        <div class="info-popup" id="info-popup">
+          <h4>📐 Max Flow – Min Cut (Discrete Mathematics)</h4>
+          <p>This application models the road network as a directed graph and applies the <strong>Ford-Fulkerson algorithm</strong> to compute the maximum traffic flow. The Min-Cut theorem states that max flow = min cut capacity.</p>
+          <div class="concept-grid">
+            <div class="concept-chip"><b>Roads</b><span>Edges in the graph with capacity limits</span></div>
+            <div class="concept-chip"><b>Intersections</b><span>Nodes S, A, B, T in the network</span></div>
+            <div class="concept-chip"><b>Traffic</b><span>Flow value on each edge</span></div>
+            <div class="concept-chip"><b>Bottleneck</b><span>The minimum cut — weakest edge</span></div>
+          </div>
+        </div>
+
+        <div id="graph-wrap">
+          <svg id="graph-svg" viewBox="0 0 700 240" xmlns="http://www.w3.org/2000/svg" style="height:240px"></svg>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-head">
+          <div class="section-title">All Paths — Flow Distribution</div>
+        </div>
+        <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+          <table class="path-tbl">
+            <thead>
+              <tr>
+                <th>Path</th>
+                <th>Route</th>
+                <th>Flow</th>
+                <th>Path Capacity</th>
+                <th>Bottleneck</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="path-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="explain">
+        <h4>🔍 Analysis Summary</h4>
+        <p id="m-exp1">—</p>
+        <p id="m-exp2">—</p>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
